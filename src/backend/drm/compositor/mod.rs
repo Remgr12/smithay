@@ -2508,7 +2508,13 @@ where
                     };
 
                     let Some(async_formats) = plane_info.formats_async.as_ref() else {
-                        return true;
+                        // The kernel does not advertise IN_FORMATS_ASYNC (it is not in
+                        // mainline), so we cannot know which formats can be async-flipped.
+                        // Only a linear buffer is universally safe to async-flip; flipping
+                        // a tiled/compressed (e.g. CCS) buffer async is rejected or, worse,
+                        // scanned out as indeterminate data (hard white flicker) on i915.
+                        // Be conservative and only allow linear here.
+                        return buffer.format().modifier == DrmModifier::Linear;
                     };
 
                     async_formats.contains(&buffer.format())
@@ -4209,7 +4215,11 @@ where
             // buffer format is actually supported.
             //
             // If we don't know because the driver does not announce async formats we
-            // will take the slower path and test what actually works.
+            // will take the slower path and test what actually works. Whether the
+            // resulting frame is actually flipped async is additionally gated by the
+            // per-frame check in `render_frame` (which is conservative about non-linear
+            // buffers when IN_FORMATS_ASYNC is unavailable), so it is fine to keep the
+            // element on the plane here and let that decide.
             // At the time of writing only the intel driver supports the async formats.
             let async_format_might_supported = plane
                 .formats_async
