@@ -672,6 +672,45 @@ impl<B: Buffer, F: Framebuffer> FrameState<B, F> {
         })
     }
 
+    /// Blocks until every buffer scheduled for scan-out in this frame has
+    /// finished rendering.
+    ///
+    /// This **must** be called before issuing an async (immediate / "tearing")
+    /// page flip. Unlike a regular page flip, an async flip is programmed to take
+    /// effect as soon as possible and the kernel does not reliably wait for the
+    /// per-plane `IN_FENCE_FD` before scanning out (this is the case on i915, for
+    /// example). Scanning out a buffer whose GPU work has not completed yet tears
+    /// an incomplete frame; on compressed/CCS modifiers the indeterminate
+    /// contents are displayed as a hard white flash.
+    ///
+    /// Buffers using explicit synchronization are already signaled at this point
+    /// (their acquire point gated the surface commit), so for the common modern
+    /// client path this is essentially free. For implicit sync we block on the
+    /// CPU for the (typically already completed) render to finish, which is the
+    /// correct trade-off: presenting now, but only once the frame is whole.
+    fn wait_for_buffers_ready(&self) {
+        for (_, state) in self.planes.iter() {
+            if state.skip {
+                continue;
+            }
+
+            let Some((sync, _)) = state.config.as_ref().and_then(|config| config.sync.as_ref()) else {
+                continue;
+            };
+
+            if sync.is_reached() {
+                continue;
+            }
+
+            if let Err(err) = sync.wait() {
+                warn!(
+                    ?err,
+                    "interrupted while waiting for a buffer fence before an async page flip"
+                );
+            }
+        }
+    }
+
     #[profiling::function]
     #[inline]
     fn set_state(&mut self, plane: plane::Handle, state: PlaneState<B, F>) {
@@ -2671,6 +2710,14 @@ where
                 && !prepared_frame.frame.async_flip_failed
             {
                 flip_flags |= PageFlipFlags::ASYNC;
+            }
+
+            // An async flip is scanned out as soon as possible and the kernel does
+            // not reliably wait for the buffer fences before doing so. Guarantee the
+            // buffers are fully rendered here so we never present an incomplete frame
+            // (which manifests as hard white flicker on compressed modifiers).
+            if flip_flags.contains(PageFlipFlags::ASYNC) {
+                prepared_frame.frame.wait_for_buffers_ready();
             }
 
             let flip = prepared_frame
