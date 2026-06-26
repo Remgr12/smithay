@@ -711,6 +711,7 @@ impl<B: Buffer, F: Framebuffer> FrameState<B, F> {
         }
     }
 
+
     #[profiling::function]
     #[inline]
     fn set_state(&mut self, plane: plane::Handle, state: PlaneState<B, F>) {
@@ -2725,6 +2726,7 @@ where
             if flip_flags.contains(PageFlipFlags::ASYNC) {
                 prepared_frame.frame.wait_for_buffers_ready();
             }
+
 
             let flip = prepared_frame
                 .frame
