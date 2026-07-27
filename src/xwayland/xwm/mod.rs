@@ -143,8 +143,8 @@ use crate::{
         xwayland_shell::{self, XWaylandShellHandler},
     },
 };
-use atomic_float::AtomicF64;
 use calloop::{Interest, LoopHandle, Mode, PostAction, generic::Generic, ping};
+use portable_atomic::AtomicF64;
 use rustix::fs::OFlags;
 use std::{
     cell::RefCell,
@@ -1440,8 +1440,8 @@ impl X11Wm {
                     let cookie = self.conn.randr_set_output_primary(self.screen.root, output_xid)?;
                     self.sequences_to_ignore
                         .push(Reverse(cookie.sequence_number() as u16));
-                    return Ok(());
                 }
+                return Ok(());
             }
         }
 
@@ -1855,6 +1855,13 @@ where
                         if let Some(frame) = state.mapped_onto.take() {
                             conn.destroy_window(frame)?;
                         }
+                        conn.change_property32(
+                            PropMode::REPLACE,
+                            n.window,
+                            xwm.atoms.WM_STATE,
+                            xwm.atoms.WM_STATE,
+                            &[0 /*WithdrawnState*/, 0 /*WINDOW_NONE*/],
+                        )?;
                     }
                 }
                 drop(_guard);
