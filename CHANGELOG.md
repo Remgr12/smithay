@@ -131,6 +131,8 @@ allowing DnD operations between X11 and Wayland clients (both directions).
 
 `X11Surface` now has a new `surface_under`-method, which is also internally used by `SpaceElement::is_in_input_region` and `crate::desktop::Window::surface_under`. Any direct usage of `under_from_surface_tree` on the underlying `wl_surface` of an `X11Surface` should be replaced with this method for XDND to work correctly.
 
+`X11Surface` now parses and exposes the Motif WM hints via `motif_hints()`.
+
 xdg_shell and layer_shell now enforce the client acking a configure before committing a buffer, as required by the protocols.
 
 ```rs
@@ -210,6 +212,9 @@ rather than being reported as disconnected. Previously such connectors (for exam
 connectors when a dock is unplugged, or across suspend/resume) leaked their CRTC reservation
 indefinitely, which could accumulate until a newly connected output could no longer be assigned a
 CRTC.
+
+XWayland now honors WM_HINTS request to map the window in IconicState(minimized). Compositors should
+check X11Surface::is_hidden() at mapping time and minimize the window appropriately.
 
 ## 0.7.0
 
